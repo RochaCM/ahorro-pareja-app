@@ -54,6 +54,9 @@
       const [showNewPlanModal, setShowNewPlanModal] = useState(false);
       const [showEditPlanModal, setShowEditPlanModal] = useState(false);
 
+      // Estado para seleccionar pagador al tocar manualmente una casilla
+      const [selectedStepToPay, setSelectedStepToPay] = useState(null);
+
       // Formularios
       const [newTitle, setNewTitle] = useState('');
       const [newTarget, setNewTarget] = useState('10000');
@@ -73,7 +76,7 @@
 
       const plan = plans.find(p => p.id === selectedPlanId) || plans[0];
 
-      // Cálculos de totales y desgloses
+      // Cálculos de totales
       const paidSteps = plan ? plan.steps.filter(s => s.isPaid) : [];
       const saved = paidSteps.reduce((acc, s) => acc + s.amount, 0);
       const progress = plan ? ((saved / plan.targetAmount) * 100).toFixed(1) : 0;
@@ -91,23 +94,40 @@
         setShowEditPlanModal(true);
       };
 
-      const togglePaid = (periodNum, forcedPaidBy = null) => {
+      // Manejo del toque en casillas
+      const handleStepClick = (step) => {
+        if (step.isPaid) {
+          // Si ya estaba pagada, se desmarca de inmediato
+          togglePaid(step.period, false, null);
+        } else {
+          // Si no está pagada, abre el modal para elegir quién pagó
+          setSelectedStepToPay(step);
+        }
+      };
+
+      const togglePaid = (periodNum, isPaidStatus, paidByPayer) => {
         const updatedSteps = plan.steps.map(s => {
           if (s.period === periodNum) {
-            if (forcedPaidBy) {
-              return { ...s, isPaid: true, paidBy: forcedPaidBy };
-            }
-            const nextPaid = !s.isPaid;
-            return { ...s, isPaid: nextPaid, paidBy: nextPaid ? 'Yo' : null };
+            return { 
+              ...s, 
+              isPaid: isPaidStatus, 
+              paidBy: isPaidStatus ? paidByPayer : null 
+            };
           }
           return s;
         });
         setPlans(plans.map(p => p.id === plan.id ? { ...p, steps: updatedSteps } : p));
       };
 
+      const confirmPayerForStep = (payer) => {
+        if (!selectedStepToPay) return;
+        togglePaid(selectedStepToPay.period, true, payer);
+        setSelectedStepToPay(null);
+      };
+
       const markRoulettePaid = (payer) => {
         if (!rouletteResult) return;
-        togglePaid(rouletteResult.period, payer);
+        togglePaid(rouletteResult.period, true, payer);
         setShowRoulette(false);
         setRouletteResult(null);
       };
@@ -320,7 +340,7 @@
                 </div>
               </div>
 
-              {/* Desglose Individual de Pagos en Pareja */}
+              {/* Desglose Individual de Pagos */}
               <div className="pt-2 border-t border-slate-800">
                 <p className="text-xs font-bold text-slate-300 mb-2">Aportes por Integrante:</p>
                 <div className="grid grid-cols-2 gap-3">
@@ -345,7 +365,7 @@
                 {plan.steps.map(step => (
                   <div 
                     key={step.period}
-                    onClick={() => togglePaid(step.period)}
+                    onClick={() => handleStepClick(step)}
                     className={`p-3.5 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
                       step.isPaid 
                         ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-300' 
@@ -362,6 +382,40 @@
                     </p>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Modal para Selección de Pagador en Marcado Manual */}
+          {selectedStepToPay && (
+            <div className="fixed inset-0 z-50 bg-[#0B132B]/80 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="bg-[#1C2541] border border-slate-700 rounded-3xl p-6 max-w-xs w-full text-center relative shadow-2xl space-y-4">
+                <button 
+                  onClick={() => setSelectedStepToPay(null)}
+                  className="absolute top-4 right-4 text-slate-400 hover:text-white font-bold"
+                >
+                  ✕
+                </button>
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-[#48E5C2]">Marcar Número #{selectedStepToPay.period}</span>
+                  <p className="text-2xl font-black text-white mt-1">${selectedStepToPay.amount.toLocaleString()}</p>
+                  <p className="text-xs text-slate-300 mt-2">¿Quién aporta esta cantidad?</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 pt-2">
+                  <button 
+                    onClick={() => confirmPayerForStep('Yo')}
+                    className="py-3 rounded-xl bg-[#48E5C2] text-[#0B132B] font-extrabold text-xs hover:opacity-90 transition"
+                  >
+                    Lo Pago Yo 🙋‍♂️
+                  </button>
+                  <button 
+                    onClick={() => confirmPayerForStep(plan.partnerName)}
+                    className="py-3 rounded-xl bg-pink-400 text-[#0B132B] font-extrabold text-xs hover:opacity-90 transition"
+                  >
+                    {plan.partnerName} 💖
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -525,7 +579,7 @@
             </div>
           )}
 
-          {/* Modal Ruleta con Asignación de Pagador */}
+          {/* Modal Ruleta */}
           {showRoulette && plan && (
             <div className="fixed inset-0 z-50 bg-[#0B132B]/80 backdrop-blur-md flex items-center justify-center p-4">
               <div className="bg-[#1C2541] border border-slate-700 rounded-3xl p-6 max-w-sm w-full text-center relative shadow-2xl">
