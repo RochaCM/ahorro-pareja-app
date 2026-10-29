@@ -9,9 +9,9 @@
   <!-- React & ReactDOM -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <!-- PeerJS para conexión directa en tiempo real -->
+  <!-- PeerJS para tiempo real -->
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <!-- Babel compiler for JSX -->
+  <!-- Babel compiler -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="bg-[#0B132B] text-slate-100 font-sans pb-12">
@@ -23,14 +23,16 @@
     const initialPlans = [
       {
         id: 'plan-1',
-        title: 'Ahorro Juntos 18K',
-        targetAmount: 18300,
+        title: 'Viaje Tijuana 🏖️',
+        targetAmount: 6000,
         frequency: 'semanal',
-        totalPeriods: 60,
-        partnerName: 'Pau 💕',
-        steps: Array.from({ length: 60 }, (_, i) => {
+        totalPeriods: 24,
+        isGroup: true,
+        person1Name: 'Hector',
+        person2Name: 'Pau 💕',
+        steps: Array.from({ length: 24 }, (_, i) => {
           const num = i + 1;
-          const amount = num * 10;
+          const amount = num * 20;
           return { 
             period: num, 
             amount, 
@@ -52,7 +54,7 @@
         return saved ? JSON.parse(saved) : initialPlans;
       });
 
-      const [selectedPlanId, setSelectedPlanId] = useState(plans[0]?.id || 'plan-1');
+      const [selectedPlanId, setSelectedPlanId] = useState(() => plans[0]?.id || null);
       const [activeTab, setActiveTab] = useState('grid');
       const [showRoulette, setShowRoulette] = useState(false);
       const [rouletteResult, setRouletteResult] = useState(null);
@@ -66,31 +68,35 @@
       const [selectedStepToPay, setSelectedStepToPay] = useState(null);
       const [activeReceiptStep, setActiveReceiptStep] = useState(null);
 
-      // Formularios
+      // Formularios Nueva Meta
       const [newTitle, setNewTitle] = useState('');
-      const [newTarget, setNewTarget] = useState('10000');
-      const [newPeriods, setNewPeriods] = useState('50');
+      const [newTarget, setNewTarget] = useState('6000');
+      const [newPeriods, setNewPeriods] = useState('24');
       const [newFreq, setNewFreq] = useState('semanal');
-      const [newPartner, setNewPartner] = useState('Pau 💕');
+      const [newIsGroup, setNewIsGroup] = useState(true);
+      const [newPerson1, setNewPerson1] = useState('Hector');
+      const [newPerson2, setNewPerson2] = useState('Pau 💕');
 
+      // Formularios Editar Meta
       const [editTitle, setEditTitle] = useState('');
       const [editTarget, setEditTarget] = useState('');
       const [editPeriods, setEditPeriods] = useState('');
       const [editFreq, setEditFreq] = useState('semanal');
-      const [editPartner, setEditPartner] = useState('');
+      const [editIsGroup, setEditIsGroup] = useState(true);
+      const [editPerson1, setEditPerson1] = useState('');
+      const [editPerson2, setEditPerson2] = useState('');
 
       const peerRef = useRef(null);
       const connRef = useRef(null);
       const myPeerIdRef = useRef('');
 
-      // Inicialización de conexión directa P2P (PeerJS)
+      // WebRTC Conexión P2P
       useEffect(() => {
         const peer = new Peer();
         peerRef.current = peer;
 
         peer.on('open', (id) => {
           myPeerIdRef.current = id;
-          // Si entramos con un link que tiene ?room=ID, nos conectamos a la pareja
           if (hostRoomId) {
             const conn = peer.connect(hostRoomId);
             connRef.current = conn;
@@ -98,11 +104,9 @@
           }
         });
 
-        // Escuchar conexiones entrantes (cuando la pareja abre nuestro link)
         peer.on('connection', (conn) => {
           connRef.current = conn;
           setupConnection(conn);
-          // Enviar inmediatamente las metas actuales a la persona que se conectó
           setTimeout(() => {
             conn.send({ type: 'SYNC_PLANS', plans });
           }, 800);
@@ -112,23 +116,19 @@
       }, []);
 
       const setupConnection = (conn) => {
-        conn.on('open', () => {
-          setIsConnected(true);
-        });
-
+        conn.on('open', () => setIsConnected(true));
         conn.on('data', (data) => {
           if (data.type === 'SYNC_PLANS') {
             setPlans(data.plans);
             localStorage.setItem('ahorro_plans', JSON.stringify(data.plans));
+            if (data.plans.length > 0 && !selectedPlanId) {
+              setSelectedPlanId(data.plans[0].id);
+            }
           }
         });
-
-        conn.on('close', () => {
-          setIsConnected(false);
-        });
+        conn.on('close', () => setIsConnected(false));
       };
 
-      // Guardar localmente y transmitir a la pareja si están conectados
       const syncPlans = (newPlans) => {
         setPlans(newPlans);
         localStorage.setItem('ahorro_plans', JSON.stringify(newPlans));
@@ -137,13 +137,13 @@
         }
       };
 
-      const plan = plans.find(p => p.id === selectedPlanId) || plans[0];
+      const plan = plans.find(p => p.id === selectedPlanId) || plans[0] || null;
       const paidSteps = plan ? plan.steps.filter(s => s.isPaid) : [];
       const saved = paidSteps.reduce((acc, s) => acc + s.amount, 0);
       const progress = plan ? ((saved / plan.targetAmount) * 100).toFixed(1) : 0;
 
-      const myTotal = paidSteps.filter(s => s.paidBy === 'Yo').reduce((acc, s) => acc + s.amount, 0);
-      const partnerTotal = paidSteps.filter(s => s.paidBy === plan?.partnerName).reduce((acc, s) => acc + s.amount, 0);
+      const p1Total = plan ? paidSteps.filter(s => s.paidBy === plan.person1Name).reduce((acc, s) => acc + s.amount, 0) : 0;
+      const p2Total = (plan && plan.isGroup) ? paidSteps.filter(s => s.paidBy === plan.person2Name).reduce((acc, s) => acc + s.amount, 0) : 0;
 
       const handleOpenEdit = () => {
         if (!plan) return;
@@ -151,7 +151,9 @@
         setEditTarget(plan.targetAmount.toString());
         setEditPeriods(plan.totalPeriods.toString());
         setEditFreq(plan.frequency);
-        setEditPartner(plan.partnerName);
+        setEditIsGroup(plan.isGroup);
+        setEditPerson1(plan.person1Name || 'Hector');
+        setEditPerson2(plan.person2Name || 'Pau 💕');
         setShowEditPlanModal(true);
       };
 
@@ -159,7 +161,12 @@
         if (step.isPaid) {
           togglePaid(step.period, false, null, null);
         } else {
-          setSelectedStepToPay(step);
+          if (!plan.isGroup) {
+            // Si es individual, se asigna automáticamente a Person1
+            togglePaid(step.period, true, plan.person1Name, null);
+          } else {
+            setSelectedStepToPay(step);
+          }
         }
       };
 
@@ -216,6 +223,24 @@
         reader.readAsDataURL(file);
       };
 
+      // Eliminar meta individual
+      const deletePlan = (planIdToDelete) => {
+        const targetPlan = plans.find(p => p.id === planIdToDelete);
+        if (confirm(`¿Estás seguro de eliminar la meta "${targetPlan?.title}"?`)) {
+          const filtered = plans.filter(p => p.id !== planIdToDelete);
+          syncPlans(filtered);
+          setSelectedPlanId(filtered[0]?.id || null);
+        }
+      };
+
+      // Eliminar TODAS las metas
+      const deleteAllPlans = () => {
+        if (confirm('⚠️ ¿Quieres eliminar TODAS las metas creadas? Esta acción no se puede deshacer.')) {
+          syncPlans([]);
+          setSelectedPlanId(null);
+        }
+      };
+
       const generateShareLink = () => {
         const shareId = myPeerIdRef.current;
         if (!shareId) return;
@@ -253,7 +278,9 @@
           targetAmount: target,
           frequency: newFreq,
           totalPeriods: periods,
-          partnerName: newPartner || 'Pau 💕',
+          isGroup: newIsGroup,
+          person1Name: newPerson1 || 'Hector',
+          person2Name: newIsGroup ? (newPerson2 || 'Pau 💕') : null,
           steps: steps
         };
 
@@ -296,7 +323,9 @@
               targetAmount: target,
               totalPeriods: periods,
               frequency: editFreq,
-              partnerName: editPartner,
+              isGroup: editIsGroup,
+              person1Name: editPerson1 || 'Hector',
+              person2Name: editIsGroup ? (editPerson2 || 'Pau 💕') : null,
               steps: updatedSteps
             };
           }
@@ -355,45 +384,85 @@
             </div>
           </header>
 
-          {/* Selector de Metas */}
-          <div className="flex items-center justify-between gap-3 bg-[#1C2541]/60 p-3 rounded-2xl border border-slate-800 flex-wrap">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
-              <span className="text-xs font-bold text-slate-400 whitespace-nowrap">Tus Metas:</span>
-              {plans.map(p => (
+          {/* Selector de Metas o Control de Vacío */}
+          {plans.length > 0 && (
+            <div className="flex items-center justify-between gap-3 bg-[#1C2541]/60 p-3 rounded-2xl border border-slate-800 flex-wrap">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
+                <span className="text-xs font-bold text-slate-400 whitespace-nowrap">Tus Metas:</span>
+                {plans.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelectedPlanId(p.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                      p.id === selectedPlanId
+                        ? 'bg-[#48E5C2] text-[#0B132B] shadow-md'
+                        : 'bg-[#0B132B] text-slate-300 border border-slate-700 hover:border-slate-500'
+                    }`}
+                  >
+                    {p.title}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
                 <button
-                  key={p.id}
-                  onClick={() => setSelectedPlanId(p.id)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition ${
-                    p.id === selectedPlanId
-                      ? 'bg-[#48E5C2] text-[#0B132B] shadow-md'
-                      : 'bg-[#0B132B] text-slate-300 border border-slate-700 hover:border-slate-500'
-                  }`}
+                  onClick={() => setShowNewPlanModal(true)}
+                  className="px-3.5 py-2 rounded-xl bg-[#48E5C2]/20 text-[#48E5C2] border border-[#48E5C2]/40 font-bold text-xs hover:bg-[#48E5C2]/30 transition"
                 >
-                  {p.title}
+                  + Nueva Meta
                 </button>
-              ))}
+                <button
+                  onClick={deleteAllPlans}
+                  className="px-3 py-2 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-bold hover:bg-red-500/20 transition"
+                  title="Eliminar todas las metas"
+                >
+                  🗑️ Borrar Todas
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => setShowNewPlanModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-[#48E5C2]/20 text-[#48E5C2] border border-[#48E5C2]/40 font-bold text-xs hover:bg-[#48E5C2]/30 transition"
-            >
-              + Nueva Meta
-            </button>
-          </div>
+          )}
+
+          {/* Estado Vacío cuando no hay metas */}
+          {plans.length === 0 && (
+            <div className="bg-[#1C2541] p-10 rounded-3xl border border-slate-700 text-center space-y-4 shadow-2xl my-8">
+              <div className="w-20 h-20 bg-[#48E5C2]/10 text-[#48E5C2] border border-[#48E5C2]/30 rounded-full flex items-center justify-center mx-auto text-4xl">
+                🎯
+              </div>
+              <h2 className="text-2xl font-black text-white">¡No tienes metas activas aún!</h2>
+              <p className="text-sm text-slate-400 max-w-md mx-auto">
+                Agrega tu nueva meta para comenzar a ahorar juntos o de forma individual, girar la ruleta y guardar tus comprobantes.
+              </p>
+              <button
+                onClick={() => setShowNewPlanModal(true)}
+                className="px-6 py-3.5 rounded-2xl bg-[#48E5C2] text-[#0B132B] font-black text-sm hover:opacity-90 transition shadow-lg inline-block"
+              >
+                + Crear Mi Primera Meta Ahora
+              </button>
+            </div>
+          )}
 
           {/* Tarjeta de Meta Principal */}
           {plan && (
             <div className="bg-[#1C2541] p-6 rounded-3xl border border-slate-700 shadow-2xl space-y-4">
               <div className="flex justify-between items-center flex-wrap gap-2">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-2xl font-black text-white">{plan.title}</h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-bold">
+                      {plan.isGroup ? '👥 Pareja / Grupo' : '👤 Individual'}
+                    </span>
                     <button
                       onClick={handleOpenEdit}
                       className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs transition"
                       title="Editar esta meta"
                     >
                       ✏️ Editar
+                    </button>
+                    <button
+                      onClick={() => deletePlan(plan.id)}
+                      className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs transition"
+                      title="Eliminar esta meta"
+                    >
+                      🗑️
                     </button>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">Reto progresivo ({plan.frequency}) de {plan.totalPeriods} periodos</p>
@@ -430,18 +499,20 @@
                 </div>
               </div>
 
-              {/* Desglose Individual */}
+              {/* Desglose Individual / Grupo */}
               <div className="pt-2 border-t border-slate-800">
                 <p className="text-xs font-bold text-slate-300 mb-2">Aportes por Integrante:</p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className={`grid gap-3 ${plan.isGroup ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   <div className="bg-[#0B132B]/60 p-3 rounded-xl border border-cyan-500/20">
-                    <span className="text-[10px] text-cyan-400 font-bold uppercase">Yo</span>
-                    <p className="text-lg font-black text-white">${myTotal.toLocaleString()}</p>
+                    <span className="text-[10px] text-cyan-400 font-bold uppercase">{plan.person1Name}</span>
+                    <p className="text-lg font-black text-white">${p1Total.toLocaleString()}</p>
                   </div>
-                  <div className="bg-[#0B132B]/60 p-3 rounded-xl border border-pink-500/20">
-                    <span className="text-[10px] text-pink-400 font-bold uppercase">{plan.partnerName}</span>
-                    <p className="text-lg font-black text-white">${partnerTotal.toLocaleString()}</p>
-                  </div>
+                  {plan.isGroup && (
+                    <div className="bg-[#0B132B]/60 p-3 rounded-xl border border-pink-500/20">
+                      <span className="text-[10px] text-pink-400 font-bold uppercase">{plan.person2Name}</span>
+                      <p className="text-lg font-black text-white">${p2Total.toLocaleString()}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -633,8 +704,8 @@
             </div>
           )}
 
-          {/* Modal Selección de Pagador */}
-          {selectedStepToPay && (
+          {/* Modal Selección de Pagador Personalizado */}
+          {selectedStepToPay && plan && (
             <div className="fixed inset-0 z-50 bg-[#0B132B]/80 backdrop-blur-md flex items-center justify-center p-4">
               <div className="bg-[#1C2541] border border-slate-700 rounded-3xl p-6 max-w-xs w-full text-center relative shadow-2xl space-y-4">
                 <button 
@@ -651,17 +722,19 @@
 
                 <div className="grid grid-cols-1 gap-2 pt-2">
                   <button 
-                    onClick={() => confirmPayerForStep('Yo')}
+                    onClick={() => confirmPayerForStep(plan.person1Name)}
                     className="py-3 rounded-xl bg-[#48E5C2] text-[#0B132B] font-extrabold text-xs hover:opacity-90 transition"
                   >
-                    Lo Pago Yo 🙋‍♂️
+                    {plan.person1Name} 🙋‍♂️
                   </button>
-                  <button 
-                    onClick={() => confirmPayerForStep(plan.partnerName)}
-                    className="py-3 rounded-xl bg-pink-400 text-[#0B132B] font-extrabold text-xs hover:opacity-90 transition"
-                  >
-                    {plan.partnerName} 💖
-                  </button>
+                  {plan.isGroup && (
+                    <button 
+                      onClick={() => confirmPayerForStep(plan.person2Name)}
+                      className="py-3 rounded-xl bg-pink-400 text-[#0B132B] font-extrabold text-xs hover:opacity-90 transition"
+                    >
+                      {plan.person2Name} 💖
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -690,6 +763,52 @@
                       className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-bold">Modo de Ahorro</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewIsGroup(false)}
+                        className={`py-2 rounded-xl border text-xs font-bold transition ${!newIsGroup ? 'bg-[#48E5C2] text-[#0B132B] border-[#48E5C2]' : 'bg-[#0B132B] text-slate-400 border-slate-700'}`}
+                      >
+                        👤 Solo Yo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewIsGroup(true)}
+                        className={`py-2 rounded-xl border text-xs font-bold transition ${newIsGroup ? 'bg-[#48E5C2] text-[#0B132B] border-[#48E5C2]' : 'bg-[#0B132B] text-slate-400 border-slate-700'}`}
+                      >
+                        👥 En Pareja / Grupo
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={`grid gap-3 ${newIsGroup ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    <div>
+                      <label className="block text-slate-300 mb-1 font-bold">Tu Nombre (Persona 1)</label>
+                      <input 
+                        type="text" 
+                        value={newPerson1}
+                        onChange={e => setNewPerson1(e.target.value)}
+                        required
+                        className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
+                      />
+                    </div>
+                    {newIsGroup && (
+                      <div>
+                        <label className="block text-slate-300 mb-1 font-bold">Nombre Pareja (Persona 2)</label>
+                        <input 
+                          type="text" 
+                          value={newPerson2}
+                          onChange={e => setNewPerson2(e.target.value)}
+                          required
+                          className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
+                        />
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-slate-300 mb-1 font-bold">Monto Meta ($)</label>
@@ -712,30 +831,21 @@
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-300 mb-1 font-bold">Frecuencia</label>
-                      <select 
-                        value={newFreq}
-                        onChange={e => setNewFreq(e.target.value)}
-                        className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
-                      >
-                        <option value="diario">Diaria</option>
-                        <option value="semanal">Semanal</option>
-                        <option value="quincenal">Quincenal</option>
-                        <option value="mensual">Mensual</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 mb-1 font-bold">Nombre Pareja</label>
-                      <input 
-                        type="text" 
-                        value={newPartner}
-                        onChange={e => setNewPartner(e.target.value)}
-                        className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
-                      />
-                    </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-bold">Frecuencia</label>
+                    <select 
+                      value={newFreq}
+                      onChange={e => setNewFreq(e.target.value)}
+                      className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
+                    >
+                      <option value="diario">Diaria</option>
+                      <option value="semanal">Semanal</option>
+                      <option value="quincenal">Quincenal</option>
+                      <option value="mensual">Mensual</option>
+                    </select>
                   </div>
+
                   <button 
                     type="submit"
                     className="w-full py-3 rounded-xl bg-[#48E5C2] text-[#0B132B] font-black text-xs hover:opacity-90 transition mt-2"
@@ -769,6 +879,52 @@
                       className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-bold">Modo de Ahorro</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditIsGroup(false)}
+                        className={`py-2 rounded-xl border text-xs font-bold transition ${!editIsGroup ? 'bg-[#48E5C2] text-[#0B132B] border-[#48E5C2]' : 'bg-[#0B132B] text-slate-400 border-slate-700'}`}
+                      >
+                        👤 Solo Yo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditIsGroup(true)}
+                        className={`py-2 rounded-xl border text-xs font-bold transition ${editIsGroup ? 'bg-[#48E5C2] text-[#0B132B] border-[#48E5C2]' : 'bg-[#0B132B] text-slate-400 border-slate-700'}`}
+                      >
+                        👥 En Pareja / Grupo
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={`grid gap-3 ${editIsGroup ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    <div>
+                      <label className="block text-slate-300 mb-1 font-bold">Persona 1</label>
+                      <input 
+                        type="text" 
+                        value={editPerson1}
+                        onChange={e => setEditPerson1(e.target.value)}
+                        required
+                        className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
+                      />
+                    </div>
+                    {editIsGroup && (
+                      <div>
+                        <label className="block text-slate-300 mb-1 font-bold">Persona 2</label>
+                        <input 
+                          type="text" 
+                          value={editPerson2}
+                          onChange={e => setEditPerson2(e.target.value)}
+                          required
+                          className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
+                        />
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-slate-300 mb-1 font-bold">Monto Meta ($)</label>
@@ -791,30 +947,21 @@
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-300 mb-1 font-bold">Frecuencia</label>
-                      <select 
-                        value={editFreq}
-                        onChange={e => setEditFreq(e.target.value)}
-                        className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
-                      >
-                        <option value="diario">Diaria</option>
-                        <option value="semanal">Semanal</option>
-                        <option value="quincenal">Quincenal</option>
-                        <option value="mensual">Mensual</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 mb-1 font-bold">Nombre Pareja</label>
-                      <input 
-                        type="text" 
-                        value={editPartner}
-                        onChange={e => setEditPartner(e.target.value)}
-                        className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
-                      />
-                    </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-bold">Frecuencia</label>
+                    <select 
+                      value={editFreq}
+                      onChange={e => setEditFreq(e.target.value)}
+                      className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
+                    >
+                      <option value="diario">Diaria</option>
+                      <option value="semanal">Semanal</option>
+                      <option value="quincenal">Quincenal</option>
+                      <option value="mensual">Mensual</option>
+                    </select>
                   </div>
+
                   <button 
                     type="submit"
                     className="w-full py-3 rounded-xl bg-[#48E5C2] text-[#0B132B] font-black text-xs hover:opacity-90 transition mt-2"
@@ -863,19 +1010,21 @@
                 ) : (
                   <div className="space-y-2">
                     <p className="text-[11px] text-slate-300 font-bold mb-1">¿Quién pagará este número?</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className={`grid gap-2 ${plan.isGroup ? 'grid-cols-2' : 'grid-cols-1'}`}>
                       <button 
-                        onClick={() => markRoulettePaid('Yo')}
+                        onClick={() => markRoulettePaid(plan.person1Name)}
                         className="py-2.5 rounded-xl bg-[#48E5C2] text-[#0B132B] font-extrabold text-xs hover:opacity-90 transition"
                       >
-                        Lo Pago Yo 🙋‍♂️
+                        {plan.person1Name} 🙋‍♂️
                       </button>
-                      <button 
-                        onClick={() => markRoulettePaid(plan.partnerName)}
-                        className="py-2.5 rounded-xl bg-pink-400 text-[#0B132B] font-extrabold text-xs hover:opacity-90 transition"
-                      >
-                        {plan.partnerName} 💖
-                      </button>
+                      {plan.isGroup && (
+                        <button 
+                          onClick={() => markRoulettePaid(plan.person2Name)}
+                          className="py-2.5 rounded-xl bg-pink-400 text-[#0B132B] font-extrabold text-xs hover:opacity-90 transition"
+                        >
+                          {plan.person2Name} 💖
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
