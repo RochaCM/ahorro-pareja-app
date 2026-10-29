@@ -9,8 +9,9 @@
   <!-- React & ReactDOM -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Firebase JS SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <!-- Babel compiler for JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
@@ -19,6 +20,15 @@
 
   <script type="text/babel">
     const { useState, useEffect } = React;
+
+    // Configuración demostrativa de Firebase para sincronización instantánea
+    const firebaseConfig = {
+      databaseURL: "https://ahorro-pareja-default-rtdb.firebaseio.com/"
+    };
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.database();
 
     const initialPlans = [
       {
@@ -34,9 +44,9 @@
           return { 
             period: num, 
             amount, 
-            isPaid: num <= 4, 
-            paidBy: num <= 4 ? (num % 2 === 0 ? 'Mi Novia 💕' : 'Yo') : null,
-            paidDate: num <= 4 ? new Date(Date.now() - (5 - num) * 86400000).toLocaleDateString() : null,
+            isPaid: false, 
+            paidBy: null,
+            paidDate: null,
             receipt: null
           };
         })
@@ -44,6 +54,10 @@
     ];
 
     function App() {
+      // Obtener el ID de la sala compartida desde la URL (?room=código)
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomId = urlParams.get('room');
+
       const [plans, setPlans] = useState(() => {
         const saved = localStorage.getItem('ahorro_plans');
         return saved ? JSON.parse(saved) : initialPlans;
@@ -56,9 +70,11 @@
       const [isSpinning, setIsSpinning] = useState(false);
       const [showNewPlanModal, setShowNewPlanModal] = useState(false);
       const [showEditPlanModal, setShowEditPlanModal] = useState(false);
+      const [showShareModal, setShowShareModal] = useState(false);
+      const [copied, setCopied] = useState(false);
 
       const [selectedStepToPay, setSelectedStepToPay] = useState(null);
-      const [activeReceiptStep, setActiveReceiptStep] = useState(null); // Para el modal de comprobante
+      const [activeReceiptStep, setActiveReceiptStep] = useState(null);
 
       // Formularios
       const [newTitle, setNewTitle] = useState('');
@@ -73,12 +89,30 @@
       const [editFreq, setEditFreq] = useState('semanal');
       const [editPartner, setEditPartner] = useState('');
 
+      // Sincronización en Tiempo Real mediante Firebase si hay una sala activa
       useEffect(() => {
-        localStorage.setItem('ahorro_plans', JSON.stringify(plans));
-      }, [plans]);
+        if (roomId) {
+          const roomRef = db.ref('rooms/' + roomId);
+          roomRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data && data.plans) {
+              setPlans(data.plans);
+            }
+          });
+          return () => roomRef.off();
+        }
+      }, [roomId]);
+
+      // Guardar cambios en Firebase (si hay sala) y en localStorage
+      const syncPlans = (newPlans) => {
+        setPlans(newPlans);
+        localStorage.setItem('ahorro_plans', JSON.stringify(newPlans));
+        if (roomId) {
+          db.ref('rooms/' + roomId).set({ plans: newPlans });
+        }
+      };
 
       const plan = plans.find(p => p.id === selectedPlanId) || plans[0];
-
       const paidSteps = plan ? plan.steps.filter(s => s.isPaid) : [];
       const saved = paidSteps.reduce((acc, s) => acc + s.amount, 0);
       const progress = plan ? ((saved / plan.targetAmount) * 100).toFixed(1) : 0;
@@ -118,7 +152,8 @@
           }
           return s;
         });
-        setPlans(plans.map(p => p.id === plan.id ? { ...p, steps: updatedSteps } : p));
+        const updatedPlans = plans.map(p => p.id === plan.id ? { ...p, steps: updatedSteps } : p);
+        syncPlans(updatedPlans);
       };
 
       const confirmPayerForStep = (payer) => {
@@ -134,7 +169,6 @@
         setRouletteResult(null);
       };
 
-      // Manejar subida de foto de comprobante
       const handleImageUpload = (e, periodNum) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -148,13 +182,30 @@
             }
             return s;
           });
-          setPlans(plans.map(p => p.id === plan.id ? { ...p, steps: updatedSteps } : p));
-          // Actualizar el estado local del modal si está abierto
+          const updatedPlans = plans.map(p => p.id === plan.id ? { ...p, steps: updatedSteps } : p);
+          syncPlans(updatedPlans);
           if (activeReceiptStep && activeReceiptStep.period === periodNum) {
             setActiveReceiptStep({ ...activeReceiptStep, receipt: base64String });
           }
         };
         reader.readAsDataURL(file);
+      };
+
+      // Generar link de invitación único para pareja
+      const generateShareLink = () => {
+        const currentRoom = roomId || 'room-' + Math.random().toString(36).substring(2, 9);
+        const shareUrl = `${window.location.origin}${window.location.pathname}?room=${currentRoom}`;
+        
+        // Guardar estado inicial en la sala
+        db.ref('rooms/' + currentRoom).set({ plans });
+        
+        if (!roomId) {
+          window.history.pushState({}, '', shareUrl);
+        }
+
+        navigator.clipboard.writeText(shareUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
       };
 
       const handleCreatePlan = (e) => {
@@ -188,7 +239,8 @@
           steps: steps
         };
 
-        setPlans([...plans, newPlan]);
+        const updatedPlans = [...plans, newPlan];
+        syncPlans(updatedPlans);
         setSelectedPlanId(newPlan.id);
         setShowNewPlanModal(false);
         setNewTitle('');
@@ -233,20 +285,8 @@
           return p;
         });
 
-        setPlans(updatedPlans);
+        syncPlans(updatedPlans);
         setShowEditPlanModal(false);
-      };
-
-      const deleteCurrentPlan = () => {
-        if (plans.length <= 1) {
-          alert('Debes tener al menos una meta activa.');
-          return;
-        }
-        if (confirm(`¿Estás seguro de eliminar la meta "${plan.title}"?`)) {
-          const filtered = plans.filter(p => p.id !== plan.id);
-          setPlans(filtered);
-          setSelectedPlanId(filtered[0].id);
-        }
       };
 
       const spinRoulette = () => {
@@ -268,19 +308,28 @@
       return (
         <div className="max-w-4xl mx-auto px-4 pt-6 space-y-6">
           {/* Header */}
-          <header className="flex justify-between items-center bg-[#1C2541] p-5 rounded-2xl border border-slate-700 shadow-xl">
+          <header className="flex justify-between items-center bg-[#1C2541] p-5 rounded-2xl border border-slate-700 shadow-xl flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#48E5C2] flex items-center justify-center text-[#0B132B] font-black text-xl">
                 $
               </div>
               <div>
                 <h1 className="text-xl font-extrabold text-white">Ahorro<span className="text-[#48E5C2]">Pro</span></h1>
-                <p className="text-xs text-slate-400">Pareja & Suerte</p>
+                <p className="text-xs text-slate-400">Pareja & Tiempo Real ⚡</p>
               </div>
             </div>
-            <span className="px-3 py-1 rounded-full bg-[#48E5C2]/10 text-[#48E5C2] text-xs font-bold border border-[#48E5C2]/30">
-              {plan?.partnerName}
-            </span>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowShareModal(true)}
+                className="px-3.5 py-2 rounded-xl bg-[#FFD166]/20 text-[#FFD166] border border-[#FFD166]/40 font-bold text-xs hover:bg-[#FFD166]/30 transition flex items-center gap-1.5"
+              >
+                🔗 Invitar Pareja
+              </button>
+              <span className="px-3 py-2 rounded-full bg-[#48E5C2]/10 text-[#48E5C2] text-xs font-bold border border-[#48E5C2]/30">
+                {plan?.partnerName}
+              </span>
+            </div>
           </header>
 
           {/* Selector de Metas */}
@@ -301,23 +350,12 @@
                 </button>
               ))}
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowNewPlanModal(true)}
-                className="px-3.5 py-2 rounded-xl bg-[#48E5C2]/20 text-[#48E5C2] border border-[#48E5C2]/40 font-bold text-xs hover:bg-[#48E5C2]/30 transition"
-              >
-                + Nueva Meta
-              </button>
-              {plans.length > 1 && (
-                <button
-                  onClick={deleteCurrentPlan}
-                  className="px-3 py-2 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-bold hover:bg-red-500/20 transition"
-                  title="Eliminar meta actual"
-                >
-                  🗑️
-                </button>
-              )}
-            </div>
+            <button
+              onClick={() => setShowNewPlanModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-[#48E5C2]/20 text-[#48E5C2] border border-[#48E5C2]/40 font-bold text-xs hover:bg-[#48E5C2]/30 transition"
+            >
+              + Nueva Meta
+            </button>
           </div>
 
           {/* Tarjeta de Meta Principal */}
@@ -433,7 +471,7 @@
                     <p className="text-lg font-black my-2 text-white">${step.amount.toLocaleString()}</p>
                     <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1">
                       <span>{step.isPaid ? `Pagado (${step.paidBy})` : 'Toca para marcar'}</span>
-                      {step.isPaid && step.receipt && <span className="text-[#48E5C2] font-bold">📷 Ver Comprobante</span>}
+                      {step.isPaid && step.receipt && <span className="text-[#48E5C2] font-bold">📷 View</span>}
                     </div>
                   </div>
                 ))}
@@ -441,7 +479,7 @@
             </div>
           )}
 
-          {/* Vista 2: Historial Detallado con Botón VIEW */}
+          {/* Vista 2: Historial Detallado */}
           {plan && activeTab === 'history' && (
             <div className="bg-[#1C2541] p-5 rounded-3xl border border-slate-700 space-y-3 shadow-xl">
               <h3 className="text-sm font-bold text-white mb-2">Registro Cronológico de Pagos</h3>
@@ -462,7 +500,6 @@
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {/* Botón VIEW para comprobante */}
                         <button
                           onClick={() => setActiveReceiptStep(step)}
                           className={`px-3 py-1.5 rounded-xl font-bold text-xs transition border ${
@@ -489,7 +526,31 @@
             </div>
           )}
 
-          {/* Modal para Ver y Subir Comprobante (VIEW) */}
+          {/* Modal Compartir Link en Tiempo Real */}
+          {showShareModal && (
+            <div className="fixed inset-0 z-50 bg-[#0B132B]/85 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="bg-[#1C2541] border border-slate-700 rounded-3xl p-6 max-w-sm w-full text-center relative shadow-2xl space-y-4">
+                <button 
+                  onClick={() => setShowShareModal(false)}
+                  className="absolute top-4 right-4 text-slate-400 hover:text-white font-bold"
+                >
+                  ✕
+                </button>
+                <div className="text-3xl">🔗</div>
+                <h3 className="text-xl font-black text-white">Sincronizar con Tu Pareja</h3>
+                <p className="text-xs text-slate-300">Genera tu enlace único para que ambos vean los avances y tiren la ruleta en tiempo real.</p>
+
+                <button 
+                  onClick={generateShareLink}
+                  className="w-full py-3 rounded-xl bg-[#FFD166] text-[#0B132B] font-black text-xs hover:opacity-90 transition"
+                >
+                  {copied ? '✓ ¡Enlace Copiado al Portapapeles!' : 'Copiar Enlace de Invitación 📋'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Modal Ver/Subir Comprobante */}
           {activeReceiptStep && (
             <div className="fixed inset-0 z-50 bg-[#0B132B]/85 backdrop-blur-md flex items-center justify-center p-4">
               <div className="bg-[#1C2541] border border-slate-700 rounded-3xl p-6 max-w-sm w-full text-center relative shadow-2xl space-y-4">
@@ -549,7 +610,7 @@
             </div>
           )}
 
-          {/* Modal Selección de Pagador en Marcado Manual */}
+          {/* Modal Selección de Pagador */}
           {selectedStepToPay && (
             <div className="fixed inset-0 z-50 bg-[#0B132B]/80 backdrop-blur-md flex items-center justify-center p-4">
               <div className="bg-[#1C2541] border border-slate-700 rounded-3xl p-6 max-w-xs w-full text-center relative shadow-2xl space-y-4">
