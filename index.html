@@ -1,19 +1,210 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AhorroPro - Pareja & Suerte</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body class="bg-[#0B132B] text-slate-100">
-    <div id="root"></div>
-    <!-- Este script carga React y tu archivo de la app automáticamente -->
-    <script type="module">
-      import React from 'https://esm.sh/react@18';
-      import ReactDOM from 'https://esm.sh/react-dom@18/client';
-      import App from './App.jsx';
-      ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-    </script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AhorroPro - Pareja & Suerte</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Babel compiler for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-[#0B132B] text-slate-100 font-sans pb-12">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function App() {
+      const [plans, setPlans] = useState([
+        {
+          id: 'plan-1',
+          title: 'Ahorro Juntos 18K',
+          targetAmount: 18300,
+          frequency: 'semanal',
+          totalPeriods: 60,
+          isGroup: true,
+          partnerName: 'Mi Novia 💕',
+          steps: Array.from({ length: 60 }, (_, i) => {
+            const num = i + 1;
+            const amount = num * 10;
+            let isPaid = num <= 4;
+            let assignedTo = null;
+            if (num === 1) assignedTo = 'Yo';
+            if (num === 2) assignedTo = 'Mi Novia 💕';
+            if (num === 3) assignedTo = 'Yo';
+            if (num === 4) assignedTo = 'Mi Novia 💕';
+
+            return { period: num, amount, isPaid, paidBy: assignedTo, assignedTo };
+          })
+        }
+      ]);
+
+      const [selectedPlanId, setSelectedPlanId] = useState('plan-1');
+      const [showRoulette, setShowRoulette] = useState(false);
+      const [rouletteResult, setRouletteResult] = useState(null);
+      const [isSpinning, setIsSpinning] = useState(false);
+
+      const plan = plans.find(p => p.id === selectedPlanId) || plans[0];
+      const saved = plan.steps.filter(s => s.isPaid).reduce((acc, s) => acc + s.amount, 0);
+      const progress = ((saved / plan.targetAmount) * 100).toFixed(1);
+
+      const togglePaid = (periodNum) => {
+        const updatedSteps = plan.steps.map(s => {
+          if (s.period === periodNum) {
+            const nextPaid = !s.isPaid;
+            return { ...s, isPaid: nextPaid, paidBy: nextPaid ? (s.assignedTo || 'Yo') : null };
+          }
+          return s;
+        });
+        setPlans(plans.map(p => p.id === plan.id ? { ...p, steps: updatedSteps } : p));
+      };
+
+      const spinRoulette = () => {
+        const available = plan.steps.filter(s => !s.isPaid && !s.assignedTo);
+        if (available.length === 0) return;
+        setIsSpinning(true);
+        let counter = 0;
+        const interval = setInterval(() => {
+          const rand = available[Math.floor(Math.random() * available.length)];
+          setRouletteResult(rand);
+          counter++;
+          if (counter > 15) {
+            clearInterval(interval);
+            setIsSpinning(false);
+          }
+        }, 100);
+      };
+
+      useEffect(() => {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      });
+
+      return (
+        <div className="max-w-4xl mx-auto px-4 pt-6 space-y-6">
+          {/* Header */}
+          <header className="flex justify-between items-center bg-[#1C2541] p-5 rounded-2xl border border-slate-700 shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#48E5C2] flex items-center justify-center text-[#0B132B] font-black text-xl">
+                $
+              </div>
+              <div>
+                <h1 className="text-xl font-extrabold text-white">Ahorro<span className="text-[#48E5C2]">Pro</span></h1>
+                <p className="text-xs text-slate-400">Pareja & Suerte</p>
+              </div>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-[#48E5C2]/10 text-[#48E5C2] text-xs font-bold border border-[#48E5C2]/30">
+              {plan.partnerName}
+            </span>
+          </header>
+
+          {/* Plan Card */}
+          <div className="bg-[#1C2541] p-6 rounded-3xl border border-slate-700 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center flex-wrap gap-2">
+              <div>
+                <h2 className="text-2xl font-black text-white">{plan.title}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Reto progresivo de {plan.totalPeriods} periodos</p>
+              </div>
+              <button 
+                onClick={() => { setShowRoulette(true); setRouletteResult(null); }}
+                className="px-4 py-2.5 rounded-xl bg-[#FFD166] text-[#0B132B] font-extrabold text-xs flex items-center gap-2 shadow-lg hover:scale-105 transition"
+              >
+                🎲 ¡Girar Ruleta de la Suerte!
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-2">
+              <div className="bg-[#0B132B] p-3.5 rounded-2xl border border-slate-800">
+                <p className="text-[11px] text-slate-400">Ahorrado</p>
+                <p className="text-xl font-black text-[#48E5C2]">${saved.toLocaleString()}</p>
+              </div>
+              <div className="bg-[#0B132B] p-3.5 rounded-2xl border border-slate-800">
+                <p className="text-[11px] text-slate-400">Meta Total</p>
+                <p className="text-xl font-black text-white">${plan.targetAmount.toLocaleString()}</p>
+              </div>
+              <div className="bg-[#0B132B] p-3.5 rounded-2xl border border-slate-800 col-span-2 sm:col-span-1">
+                <p className="text-[11px] text-slate-400">Progreso</p>
+                <p className="text-xl font-black text-[#FFD166]">{progress}%</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Grid of Steps */}
+          <div className="space-y-3">
+            <h3 className="text-base font-bold text-white">Calendario de Aportes</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {plan.steps.map(step => (
+                <div 
+                  key={step.period}
+                  onClick={() => togglePaid(step.period)}
+                  className={`p-3.5 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
+                    step.isPaid 
+                      ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-300' 
+                      : 'bg-[#1C2541] border-slate-700 hover:border-[#48E5C2]'
+                  }`}
+                >
+                  <div className="flex justify-between items-center text-xs font-bold">
+                    <span>#{step.period}</span>
+                    <span>{step.isPaid ? '✓' : '○'}</span>
+                  </div>
+                  <p className="text-lg font-black my-2 text-white">${step.amount.toLocaleString()}</p>
+                  <p className="text-[10px] text-slate-400">
+                    {step.isPaid ? `Pagado (${step.paidBy})` : 'Toca para marcar'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Roulette Modal */}
+          {showRoulette && (
+            <div className="fixed inset-0 z-50 bg-[#0B132B]/80 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="bg-[#1C2541] border border-slate-700 rounded-3xl p-6 max-w-sm w-full text-center relative shadow-2xl">
+                <button 
+                  onClick={() => setShowRoulette(false)}
+                  className="absolute top-4 right-4 text-slate-400 hover:text-white font-bold"
+                >
+                  ✕
+                </button>
+                <div className="text-3xl mb-2">🎲</div>
+                <h3 className="text-xl font-black text-white">¡Día de la Suerte!</h3>
+                <p className="text-xs text-slate-300 mt-1 mb-4">Gira para saber qué número te toca pagar hoy.</p>
+
+                <div className="bg-[#0B132B] border-2 border-[#FFD166]/40 rounded-2xl p-5 my-4 min-h-[110px] flex flex-col justify-center items-center">
+                  {rouletteResult ? (
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-[#FFD166]">Número Asignado</span>
+                      <p className="text-3xl font-black text-white">#{rouletteResult.period}</p>
+                      <p className="text-xl font-black text-[#48E5C2]">${rouletteResult.amount.toLocaleString()}</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400">Presiona el botón para tirar los dados</p>
+                  )}
+                </div>
+
+                <button 
+                  onClick={spinRoulette}
+                  disabled={isSpinning}
+                  className="w-full py-3 rounded-xl bg-[#FFD166] text-[#0B132B] font-black text-xs hover:opacity-90 transition disabled:opacity-50"
+                >
+                  {isSpinning ? '¡Girando...!' : '¡Girar Ruleta Ahora!'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
 </html>
