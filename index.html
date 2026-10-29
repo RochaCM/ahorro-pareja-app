@@ -20,7 +20,6 @@
   <script type="text/babel">
     const { useState, useEffect } = React;
 
-    // Plan por defecto
     const initialPlans = [
       {
         id: 'plan-1',
@@ -38,7 +37,6 @@
     ];
 
     function App() {
-      // Cargar planes guardados o usar el inicial
       const [plans, setPlans] = useState(() => {
         const saved = localStorage.getItem('ahorro_plans');
         return saved ? JSON.parse(saved) : initialPlans;
@@ -49,6 +47,7 @@
       const [rouletteResult, setRouletteResult] = useState(null);
       const [isSpinning, setIsSpinning] = useState(false);
       const [showNewPlanModal, setShowNewPlanModal] = useState(false);
+      const [showEditPlanModal, setShowEditPlanModal] = useState(false);
 
       // Formulario para nueva meta
       const [newTitle, setNewTitle] = useState('');
@@ -57,7 +56,13 @@
       const [newFreq, setNewFreq] = useState('semanal');
       const [newPartner, setNewPartner] = useState('Mi Novia 💕');
 
-      // Guardar cambios en localStorage
+      // Formulario para editar meta
+      const [editTitle, setEditTitle] = useState('');
+      const [editTarget, setEditTarget] = useState('');
+      const [editPeriods, setEditPeriods] = useState('');
+      const [editFreq, setEditFreq] = useState('semanal');
+      const [editPartner, setEditPartner] = useState('');
+
       useEffect(() => {
         localStorage.setItem('ahorro_plans', JSON.stringify(plans));
       }, [plans]);
@@ -65,6 +70,17 @@
       const plan = plans.find(p => p.id === selectedPlanId) || plans[0];
       const saved = plan ? plan.steps.filter(s => s.isPaid).reduce((acc, s) => acc + s.amount, 0) : 0;
       const progress = plan ? ((saved / plan.targetAmount) * 100).toFixed(1) : 0;
+
+      // Abrir modal de edición con los datos actuales
+      const handleOpenEdit = () => {
+        if (!plan) return;
+        setEditTitle(plan.title);
+        setEditTarget(plan.targetAmount.toString());
+        setEditPeriods(plan.totalPeriods.toString());
+        setEditFreq(plan.frequency);
+        setEditPartner(plan.partnerName);
+        setShowEditPlanModal(true);
+      };
 
       const togglePaid = (periodNum) => {
         const updatedSteps = plan.steps.map(s => {
@@ -83,13 +99,11 @@
 
         const periods = parseInt(newPeriods) || 30;
         const target = parseFloat(newTarget) || 5000;
-        
-        // Generar aportes con progresión simple equilibrada
         const baseStep = (target * 2) / (periods * (periods + 1));
         
         const steps = Array.from({ length: periods }, (_, i) => {
           const num = i + 1;
-          const calculated = Math.round(baseStep * num / 5) * 5; // Redondear a múltiplos de 5
+          const calculated = Math.round(baseStep * num / 5) * 5;
           return {
             period: num,
             amount: calculated > 0 ? calculated : 10,
@@ -114,6 +128,49 @@
         setSelectedPlanId(newPlan.id);
         setShowNewPlanModal(false);
         setNewTitle('');
+      };
+
+      const handleSaveEditPlan = (e) => {
+        e.preventDefault();
+        if (!editTitle.trim()) return;
+
+        const periods = parseInt(editPeriods) || 30;
+        const target = parseFloat(editTarget) || 5000;
+        const baseStep = (target * 2) / (periods * (periods + 1));
+
+        // Reconstruir pasos conservando el estado de pagados existentes
+        const updatedSteps = Array.from({ length: periods }, (_, i) => {
+          const num = i + 1;
+          const existingStep = plan.steps.find(s => s.period === num);
+          const calculated = Math.round(baseStep * num / 5) * 5;
+          const newAmount = calculated > 0 ? calculated : 10;
+
+          return {
+            period: num,
+            amount: existingStep ? existingStep.amount : newAmount,
+            isPaid: existingStep ? existingStep.isPaid : false,
+            paidBy: existingStep ? existingStep.paidBy : null,
+            assignedTo: existingStep ? existingStep.assignedTo : null
+          };
+        });
+
+        const updatedPlans = plans.map(p => {
+          if (p.id === plan.id) {
+            return {
+              ...p,
+              title: editTitle,
+              targetAmount: target,
+              totalPeriods: periods,
+              frequency: editFreq,
+              partnerName: editPartner,
+              steps: updatedSteps
+            };
+          }
+          return p;
+        });
+
+        setPlans(updatedPlans);
+        setShowEditPlanModal(false);
       };
 
       const deleteCurrentPlan = () => {
@@ -204,7 +261,16 @@
             <div className="bg-[#1C2541] p-6 rounded-3xl border border-slate-700 shadow-2xl space-y-4">
               <div className="flex justify-between items-center flex-wrap gap-2">
                 <div>
-                  <h2 className="text-2xl font-black text-white">{plan.title}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-2xl font-black text-white">{plan.title}</h2>
+                    <button
+                      onClick={handleOpenEdit}
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs transition"
+                      title="Editar esta meta"
+                    >
+                      ✏️ Editar
+                    </button>
+                  </div>
                   <p className="text-xs text-slate-400 mt-0.5">Reto progresivo ({plan.frequency}) de {plan.totalPeriods} periodos</p>
                 </div>
                 <button 
@@ -240,10 +306,10 @@
             </div>
           )}
 
-          {/* Grid de Pasos / Calendario */}
+          {/* Grid de Pasos */}
           {plan && (
             <div className="space-y-3">
-              <h3 className="text-base font-bold text-white">Pasos del Plan</h3>
+              <h3 className="text-base font-bold text-white">Pasos del Plan ({plan.totalPeriods} totales)</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 {plan.steps.map(step => (
                   <div 
@@ -304,7 +370,7 @@
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-300 mb-1 font-bold">Cantidad de Pasos</label>
+                      <label className="block text-slate-300 mb-1 font-bold">Cantidad de Pasos/Semanas</label>
                       <input 
                         type="number" 
                         value={newPeriods}
@@ -343,6 +409,85 @@
                     className="w-full py-3 rounded-xl bg-[#48E5C2] text-[#0B132B] font-black text-xs hover:opacity-90 transition mt-2"
                   >
                     ¡Guardar y Comenzar Meta!
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal Editar Meta Existente */}
+          {showEditPlanModal && (
+            <div className="fixed inset-0 z-50 bg-[#0B132B]/80 backdrop-blur-md flex items-center justify-center p-4">
+              <div className="bg-[#1C2541] border border-slate-700 rounded-3xl p-6 max-w-md w-full relative shadow-2xl">
+                <button 
+                  onClick={() => setShowEditPlanModal(false)}
+                  className="absolute top-4 right-4 text-slate-400 hover:text-white font-bold"
+                >
+                  ✕
+                </button>
+                <h3 className="text-xl font-black text-white mb-4">✏️ Editar Meta</h3>
+                <form onSubmit={handleSaveEditPlan} className="space-y-4 text-xs">
+                  <div>
+                    <label className="block text-slate-300 mb-1 font-bold">Nombre de la Meta</label>
+                    <input 
+                      type="text" 
+                      value={editTitle}
+                      onChange={e => setEditTitle(e.target.value)}
+                      required
+                      className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 mb-1 font-bold">Monto Meta ($)</label>
+                      <input 
+                        type="number" 
+                        value={editTarget}
+                        onChange={e => setEditTarget(e.target.value)}
+                        required
+                        className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-1 font-bold">Total de Pasos / Semanas</label>
+                      <input 
+                        type="number" 
+                        value={editPeriods}
+                        onChange={e => setEditPeriods(e.target.value)}
+                        required
+                        className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 mb-1 font-bold">Frecuencia</label>
+                      <select 
+                        value={editFreq}
+                        onChange={e => setEditFreq(e.target.value)}
+                        className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
+                      >
+                        <option value="diario">Diaria</option>
+                        <option value="semanal">Semanal</option>
+                        <option value="quincenal">Quincenal</option>
+                        <option value="mensual">Mensual</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-1 font-bold">Nombre Pareja</label>
+                      <input 
+                        type="text" 
+                        value={editPartner}
+                        onChange={e => setEditPartner(e.target.value)}
+                        className="w-full bg-[#0B132B] border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-[#48E5C2]"
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    type="submit"
+                    className="w-full py-3 rounded-xl bg-[#48E5C2] text-[#0B132B] font-black text-xs hover:opacity-90 transition mt-2"
+                  >
+                    Guardar Cambios
                   </button>
                 </form>
               </div>
