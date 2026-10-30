@@ -162,9 +162,9 @@
           setIsCloudConnected(snap.val() === true);
         });
 
-        // Sincronización robusta en tiempo real con Firebase
         const roomRef = db.ref(`salas/${ROOM_ID}/plans`);
         
+        // Sincronización en tiempo real sin bloquear bucles
         roomRef.on('value', (snapshot) => {
           const data = snapshot.val();
           if (data) {
@@ -183,9 +183,12 @@
         };
       }, []);
 
-      const syncPlans = (newPlans) => {
-        setPlans(newPlans);
-        db.ref(`salas/${ROOM_ID}/plans`).set(newPlans);
+      // Función de guardado atómico directo en la ruta de Firebase
+      const saveToFirebase = (updatedPlans) => {
+        setPlans(updatedPlans);
+        db.ref(`salas/${ROOM_ID}/plans`).set(updatedPlans).catch(err => {
+          console.error("Error al sincronizar con Firebase:", err);
+        });
       };
 
       if (isLoading) {
@@ -250,7 +253,7 @@
           return s;
         });
         const updatedPlans = plans.map(p => p.id === plan.id ? { ...p, steps: updatedSteps } : p);
-        syncPlans(updatedPlans);
+        saveToFirebase(updatedPlans);
       };
 
       const confirmPayerForStep = (payer) => {
@@ -280,7 +283,7 @@
             return s;
           });
           const updatedPlans = plans.map(p => p.id === plan.id ? { ...p, steps: updatedSteps } : p);
-          syncPlans(updatedPlans);
+          saveToFirebase(updatedPlans);
           if (activeReceiptStep && activeReceiptStep.period === periodNum) {
             setActiveReceiptStep({ ...activeReceiptStep, receipt: base64String });
           }
@@ -292,14 +295,14 @@
         const targetPlan = plans.find(p => p.id === planIdToDelete);
         if (confirm(`¿Estás seguro de eliminar la meta "${targetPlan?.title}"?`)) {
           const filtered = plans.filter(p => p.id !== planIdToDelete);
-          syncPlans(filtered);
+          saveToFirebase(filtered);
           setSelectedPlanId(null);
         }
       };
 
       const deleteAllPlans = () => {
         if (confirm('⚠️ ¿Quieres eliminar TODAS las metas de esta sala?')) {
-          syncPlans([]);
+          saveToFirebase([]);
           setSelectedPlanId(null);
         }
       };
@@ -340,7 +343,7 @@
         };
 
         const updatedPlans = [...plans, newPlan];
-        syncPlans(updatedPlans);
+        saveToFirebase(updatedPlans);
         setSelectedPlanId(newPlan.id);
         setShowNewPlanModal(false);
         setNewTitle('');
@@ -389,7 +392,7 @@
           return p;
         });
 
-        syncPlans(updatedPlans);
+        saveToFirebase(updatedPlans);
         setShowEditPlanModal(false);
       };
 
@@ -1067,7 +1070,7 @@
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block mb-1 font-bold">Monto Meta ($)</label>
-                      <input type="number" value={editTarget} onChange={e => setEditTarget(e.target.value)} required className={`w-full ${theme.inputBg} border rounded-xl p-3`} />
+                      <input type="number" value={editTarget} onChange={e => setNewTarget(e.target.value)} required className={`w-full ${theme.inputBg} border rounded-xl p-3`} />
                     </div>
                     <div>
                       <label className="block mb-1 font-bold">Total de Pasos / Semanas</label>
