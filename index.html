@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AhorroPro - Pareja & Nube</title>
+  <title>AhorroPro - Salas Privadas & Nube</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React & ReactDOM -->
@@ -19,9 +19,8 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+    const { useState, useEffect } = React;
 
-    // Configuración exacta con la URL de tu Realtime Database
     const firebaseConfig = {
       apiKey: "AIzaSyCOvzp1DFR6XGzrmdgS3-c2htcwKuBgIk",
       authDomain: "ahorropro-bcc1c.firebaseapp.com",
@@ -36,6 +35,19 @@
       firebase.initializeApp(firebaseConfig);
     }
     const db = firebase.database();
+
+    // Obtener o asignar ID de sala desde la URL (Ej: index.html?sala=hector-pau)
+    const getRoomId = () => {
+      const params = new URLSearchParams(window.location.search);
+      let room = params.get('sala');
+      if (!room) {
+        room = 'sala-' + Math.random().toString(36).substring(2, 8);
+        window.history.replaceState({}, '', `?sala=${room}`);
+      }
+      return room;
+    };
+
+    const ROOM_ID = getRoomId();
 
     const initialPlans = [
       {
@@ -104,6 +116,8 @@
       const [isSpinning, setIsSpinning] = useState(false);
       const [showNewPlanModal, setShowNewPlanModal] = useState(false);
       const [showEditPlanModal, setShowEditPlanModal] = useState(false);
+      const [showShareModal, setShowShareModal] = useState(false);
+      const [copied, setCopied] = useState(false);
       const [isCloudConnected, setIsCloudConnected] = useState(false);
       const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
@@ -145,55 +159,38 @@
           setNotificationsEnabled(true);
         }
 
-        // 1. Estado de la conexión
         const connectedRef = db.ref('.info/connected');
         connectedRef.on('value', (snap) => {
           setIsCloudConnected(snap.val() === true);
         });
 
-        // 2. Escuchar cambios de la nube en tiempo real
-        const plansRef = db.ref('ahorro_plans');
-        plansRef.on('value', (snapshot) => {
+        // Apuntar directamente a la sala única en Firebase
+        const roomRef = db.ref(`salas/${ROOM_ID}/plans`);
+        roomRef.on('value', (snapshot) => {
           const data = snapshot.val();
-          if (data && Array.isArray(data)) {
-            setPlans(data);
-          } else if (data && typeof data === 'object') {
-            setPlans(Object.values(data));
+          if (data) {
+            // Convertir de objeto a array limpio si es necesario para evitar errores de índices
+            const plansArray = Array.isArray(data) ? data : Object.values(data);
+            setPlans(plansArray);
           } else {
-            // Si la base de datos está totalmente vacía, creamos el plan inicial por única vez
-            plansRef.set(initialPlans);
+            roomRef.set(initialPlans);
             setPlans(initialPlans);
           }
           setIsLoading(false);
         }, (error) => {
-          console.error("Error sincronizando:", error);
+          console.error("Error de sincronización:", error);
           setIsLoading(false);
         });
 
         return () => {
           connectedRef.off();
-          plansRef.off();
+          roomRef.off();
         };
       }, []);
 
-      const requestNotificationPermission = () => {
-        if (!window.Notification) {
-          alert('Tu navegador no soporta notificaciones.');
-          return;
-        }
-        Notification.requestPermission().then(permission => {
-          if (permission === 'granted') {
-            setNotificationsEnabled(true);
-            new Notification('¡AhorroPro Activado! 🚀', { body: 'Alertas configuradas correctamente.' });
-          } else {
-            alert('Permiso de notificaciones denegado.');
-          }
-        });
-      };
-
       const syncPlans = (newPlans) => {
         setPlans(newPlans);
-        db.ref('ahorro_plans').set(newPlans).catch(err => {
+        db.ref(`salas/${ROOM_ID}/plans`).set(newPlans).catch(err => {
           console.error('Error al guardar en Firebase:', err);
         });
       };
@@ -204,14 +201,14 @@
             <div className={`w-16 h-16 rounded-2xl ${theme.accentBg} flex items-center justify-center text-slate-900 font-black text-3xl animate-bounce shadow-xl`}>
               $
             </div>
-            <h2 className="text-xl font-black">Conectando con AhorroPro Nube...</h2>
-            <p className="text-xs opacity-75">Cargando tus metas guardadas ☁️</p>
+            <h2 className="text-xl font-black">Conectando a tu Sala de AhorroPro...</h2>
+            <p className="text-xs opacity-75">Sincronizando datos en tiempo real ☁️</p>
           </div>
         );
       }
 
       const plan = plans.find(p => p.id === selectedPlanId) || null;
-      const paidSteps = plan ? plan.steps.filter(s => s.isPaid) : [];
+      const paidSteps = plan && plan.steps ? plan.steps.filter(s => s.isPaid) : [];
       const saved = paidSteps.reduce((acc, s) => acc + s.amount, 0);
       const progress = plan ? ((saved / plan.targetAmount) * 100).toFixed(1) : 0;
       const isCompleted = plan && saved >= plan.targetAmount;
@@ -429,20 +426,16 @@
               </div>
               <div>
                 <h1 className="text-xl font-extrabold">Ahorro<span className={theme.accentText}>Pro</span></h1>
-                <p className="text-xs opacity-75">Nube & Tiempo Real ☁️⚡</p>
+                <p className="text-xs opacity-75">Sala: <span className="font-mono font-bold text-amber-400">{ROOM_ID}</span> ☁️⚡</p>
               </div>
             </div>
             
             <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={requestNotificationPermission}
-                className={`px-3 py-2 rounded-xl border text-xs font-bold transition flex items-center gap-1 ${
-                  notificationsEnabled 
-                    ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/40' 
-                    : 'bg-amber-400/20 text-amber-500 border-amber-400/40 hover:bg-amber-400/30'
-                }`}
+                onClick={() => setShowShareModal(true)}
+                className={`px-3.5 py-2 rounded-xl ${theme.accentBg} text-slate-900 text-xs font-black shadow-md hover:opacity-90 transition`}
               >
-                {notificationsEnabled ? '🔔 Alertas' : '🔕 Alertas'}
+                🔗 Compartir Link con Pau
               </button>
 
               <button
@@ -472,7 +465,7 @@
               <div className="flex justify-between items-center flex-wrap gap-3">
                 <div>
                   <h2 className="text-2xl font-black">Panel de Metas 🎯</h2>
-                  <p className="text-xs opacity-75">Tus metas sincronizadas automáticamente en la nube.</p>
+                  <p className="text-xs opacity-75">Metas compartidas en tiempo real para esta sala.</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -497,10 +490,7 @@
                   <div className={`w-20 h-20 ${theme.accentBg}/10 ${theme.accentText} border ${theme.accentBorder}/30 rounded-full flex items-center justify-center mx-auto text-4xl`}>
                     🎯
                   </div>
-                  <h3 className="text-xl font-black">¡No tienes metas creadas!</h3>
-                  <p className="text-sm opacity-75 max-w-md mx-auto">
-                    Comienza agregando tu primera meta de ahorro.
-                  </p>
+                  <h3 className="text-xl font-black">¡No hay metas en esta sala!</h3>
                   <button
                     onClick={() => setShowNewPlanModal(true)}
                     className={`px-6 py-3.5 rounded-2xl ${theme.accentBg} text-slate-900 font-black text-sm hover:opacity-90 transition shadow-lg inline-block`}
@@ -776,6 +766,34 @@
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* MODAL COMPARTIR LINK */}
+          {showShareModal && (
+            <div className={`fixed inset-0 z-50 ${theme.modalBg} flex items-center justify-center p-4`}>
+              <div className={`${theme.card} border rounded-3xl p-6 max-w-sm w-full text-center relative shadow-2xl space-y-4`}>
+                <button onClick={() => setShowShareModal(false)} className="absolute top-4 right-4 opacity-70 hover:opacity-100 font-bold">✕</button>
+                <div className="text-3xl">🔗</div>
+                <h3 className="text-xl font-black">Enlace de Sala Compartida</h3>
+                <p className="text-xs opacity-75">Copia este link y mándaselo a Pau. Todo lo que hagan aquí se sincronizará en tiempo real.</p>
+                <input 
+                  type="text" 
+                  readOnly 
+                  value={window.location.href} 
+                  className={`w-full ${theme.inputBg} border rounded-xl p-2.5 text-xs text-center font-mono`} 
+                />
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(window.location.href);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }} 
+                  className={`w-full py-3 rounded-xl ${theme.accentBg} text-slate-900 font-black text-xs hover:opacity-90 transition`}
+                >
+                  {copied ? '¡Link Copiado al Portapapeles! ✅' : 'Copiar Link de Sala 📋'}
+                </button>
+              </div>
             </div>
           )}
 
