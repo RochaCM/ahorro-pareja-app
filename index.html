@@ -72,6 +72,8 @@
       }
     };
 
+    const daysOfWeek = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
     function App() {
       const urlParams = new URLSearchParams(window.location.search);
       const hostRoomId = urlParams.get('room');
@@ -373,11 +375,11 @@
           const num = i + 1;
           const existingStep = plan.steps.find(s => s.period === num);
           const calculated = Math.round(baseStep * num / 5) * 5;
-          const newAmount = calculated > 0 ? calculated : 10;
+          const newAmount = calculated > 0 ? calculated : newAmountBase => newAmountBase;
 
           return {
             period: num,
-            amount: existingStep ? existingStep.amount : newAmount,
+            amount: existingStep ? existingStep.amount : (calculated > 0 ? calculated : 10),
             isPaid: existingStep ? existingStep.isPaid : false,
             paidBy: existingStep ? existingStep.paidBy : null,
             paidDate: existingStep ? existingStep.paidDate : null,
@@ -439,7 +441,6 @@
             </div>
             
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Botón Activar Notificaciones */}
               <button
                 onClick={requestNotificationPermission}
                 className={`px-3 py-2 rounded-xl border text-xs font-bold transition flex items-center gap-1 ${
@@ -451,7 +452,6 @@
                 {notificationsEnabled ? '🔔 Alertas Activas' : '🔕 Activar Alertas'}
               </button>
 
-              {/* Botón Alternar Tema */}
               <button
                 onClick={toggleTheme}
                 className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition ${
@@ -887,27 +887,49 @@
                     <input type="text" placeholder="Ej. Cena romántica o fin de semana 🌅" value={newReward} onChange={e => setNewReward(e.target.value)} className={`w-full ${theme.inputBg} border rounded-xl p-3 focus:outline-none`} />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block mb-1 font-bold">Frecuencia</label>
-                      <select value={newFreq} onChange={e => {
-                        setNewFreq(e.target.value);
-                        if(e.target.value === 'semanal') setNewPayDay('Viernes');
-                        else if(e.target.value === 'quincenal') setNewPayDay('Día 15 y 30');
-                        else if(e.target.value === 'mensual') setNewPayDay('Último día del mes');
-                        else setNewPayDay('Diario');
-                      }} className={`w-full ${theme.inputBg} border rounded-xl p-3`}>
-                        <option value="diario">Diaria</option>
-                        <option value="semanal">Semanal</option>
-                        <option value="quincenal">Quincenal</option>
-                        <option value="mensual">Mensual</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block mb-1 font-bold">Día de Cobro / Alerta</label>
-                      <input type="text" value={newPayDay} onChange={e => setNewPayDay(e.target.value)} placeholder="Ej. Viernes o Día 15" className={`w-full ${theme.inputBg} border rounded-xl p-3`} />
-                    </div>
+                  <div>
+                    <label className="block mb-1 font-bold">Frecuencia</label>
+                    <select value={newFreq} onChange={e => {
+                      setNewFreq(e.target.value);
+                      if(e.target.value === 'semanal') setNewPayDay('Viernes');
+                      else if(e.target.value === 'quincenal') setNewPayDay('Quincenal (15 y 30)');
+                      else if(e.target.value === 'mensual') setNewPayDay('Mensual (Fin de mes)');
+                      else setNewPayDay('Diario');
+                    }} className={`w-full ${theme.inputBg} border rounded-xl p-3`}>
+                      <option value="diario">Diaria</option>
+                      <option value="semanal">Semanal</option>
+                      <option value="quincenal">Quincenal</option>
+                      <option value="mensual">Mensual</option>
+                    </select>
                   </div>
+
+                  {/* Selector con cuadros de días si es semanal */}
+                  {newFreq === 'semanal' ? (
+                    <div>
+                      <label className="block mb-1 font-bold">Día de la semana para ahorrar</label>
+                      <div className="grid grid-cols-4 gap-2 pt-1">
+                        {daysOfWeek.map(day => (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => setNewPayDay(day)}
+                            className={`py-2 px-1 rounded-xl font-bold text-center border transition text-[11px] ${
+                              newPayDay === day 
+                                ? `${theme.accentBg} text-slate-900 border-current shadow-md scale-105` 
+                                : `${theme.cardSub} opacity-75 hover:opacity-100`
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block mb-1 font-bold">Detalle de Cobro / Alerta</label>
+                      <input type="text" value={newPayDay} onChange={e => setNewPayDay(e.target.value)} className={`w-full ${theme.inputBg} border rounded-xl p-3`} />
+                    </div>
+                  )}
 
                   <div>
                     <label className="block mb-1 font-bold">Modo de Ahorro</label>
@@ -964,21 +986,46 @@
                     <input type="text" value={editReward} onChange={e => setEditReward(e.target.value)} className={`w-full ${theme.inputBg} border rounded-xl p-3`} />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block mb-1 font-bold">Frecuencia</label>
+                    <select value={editFreq} onChange={e => {
+                      setEditFreq(e.target.value);
+                      if(e.target.value === 'semanal') setEditPayDay('Viernes');
+                    }} className={`w-full ${theme.inputBg} border rounded-xl p-3`}>
+                      <option value="diario">Diaria</option>
+                      <option value="semanal">Semanal</option>
+                      <option value="quincenal">Quincenal</option>
+                      <option value="mensual">Mensual</option>
+                    </select>
+                  </div>
+
+                  {/* Selector con cuadros de días si es semanal en edición */}
+                  {editFreq === 'semanal' ? (
                     <div>
-                      <label className="block mb-1 font-bold">Frecuencia</label>
-                      <select value={editFreq} onChange={e => setEditFreq(e.target.value)} className={`w-full ${theme.inputBg} border rounded-xl p-3`}>
-                        <option value="diario">Diaria</option>
-                        <option value="semanal">Semanal</option>
-                        <option value="quincenal">Quincenal</option>
-                        <option value="mensual">Mensual</option>
-                      </select>
+                      <label className="block mb-1 font-bold">Día de la semana para ahorrar</label>
+                      <div className="grid grid-cols-4 gap-2 pt-1">
+                        {daysOfWeek.map(day => (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => setEditPayDay(day)}
+                            className={`py-2 px-1 rounded-xl font-bold text-center border transition text-[11px] ${
+                              editPayDay === day 
+                                ? `${theme.accentBg} text-slate-900 border-current shadow-md scale-105` 
+                                : `${theme.cardSub} opacity-75 hover:opacity-100`
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                  ) : (
                     <div>
-                      <label className="block mb-1 font-bold">Día de Cobro / Alerta</label>
+                      <label className="block mb-1 font-bold">Detalle de Cobro / Alerta</label>
                       <input type="text" value={editPayDay} onChange={e => setEditPayDay(e.target.value)} className={`w-full ${theme.inputBg} border rounded-xl p-3`} />
                     </div>
-                  </div>
+                  )}
 
                   <div>
                     <label className="block mb-1 font-bold">Modo de Ahorro</label>
