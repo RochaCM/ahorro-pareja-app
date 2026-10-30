@@ -453,15 +453,26 @@
                 : 'bg-[#1C2541] border-slate-700'
             }`}>
               
-              {/* Banner de Celebración si se completó al 100% */}
+              {/* Banner de Celebración y Opción de Eliminar si se completó al 100% */}
               {isCompleted && (
-                <div className="bg-emerald-500/20 border border-emerald-500/50 p-4 rounded-2xl text-center space-y-1 animate-pulse">
-                  <span className="text-2xl">🏆🎉</span>
-                  <h3 className="text-xl font-black text-emerald-300">¡META COMPLETADA AL 100%!</h3>
-                  <p className="text-xs text-slate-200">
-                    ¡Felicidades <span className="text-[#48E5C2] font-bold">{plan.person1Name}</span> {plan.isGroup ? `y ${plan.person2Name}` : ''}! Ya pueden reclamar su premio:
-                  </p>
-                  <p className="text-sm font-black text-amber-300 pt-1">🎁 {plan.reward}</p>
+                <div className="bg-emerald-500/20 border border-emerald-500/50 p-5 rounded-2xl text-center space-y-3 animate-pulse">
+                  <div>
+                    <span className="text-3xl">🏆🎉</span>
+                    <h3 className="text-xl font-black text-emerald-300 mt-1">¡META COMPLETADA AL 100%!</h3>
+                    <p className="text-xs text-slate-200 mt-1">
+                      ¡Felicidades <span className="text-[#48E5C2] font-bold">{plan.person1Name}</span> {plan.isGroup ? `y ${plan.person2Name}` : ''}! Ya pueden reclamar su premio:
+                    </p>
+                    <p className="text-sm font-black text-amber-300 pt-1">🎁 {plan.reward}</p>
+                  </div>
+
+                  <div className="pt-2 border-t border-emerald-500/30 flex justify-center">
+                    <button
+                      onClick={() => deletePlan(plan.id)}
+                      className="px-5 py-2.5 rounded-xl bg-red-500 text-white font-black text-xs hover:bg-red-600 shadow-lg transition flex items-center gap-2"
+                    >
+                      🗑️ Eliminar Meta Completada (Cerrar Reto)
+                    </button>
+                  </div>
                 </div>
               )}
 
