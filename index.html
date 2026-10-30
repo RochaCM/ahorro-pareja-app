@@ -36,7 +36,6 @@
     }
     const db = firebase.database();
 
-    // Obtener o asignar ID de sala desde la URL (Ej: index.html?sala=pareja123)
     const getRoomId = () => {
       const params = new URLSearchParams(window.location.search);
       let room = params.get('sala');
@@ -124,7 +123,7 @@
       const [selectedStepToPay, setSelectedStepToPay] = useState(null);
       const [activeReceiptStep, setActiveReceiptStep] = useState(null);
 
-      // Form Modals State
+      // Formularios
       const [newTitle, setNewTitle] = useState('');
       const [newTarget, setNewTarget] = useState('6000');
       const [newPeriods, setNewPeriods] = useState('24');
@@ -163,7 +162,9 @@
           setIsCloudConnected(snap.val() === true);
         });
 
+        // Sincronización robusta en tiempo real con Firebase
         const roomRef = db.ref(`salas/${ROOM_ID}/plans`);
+        
         roomRef.on('value', (snapshot) => {
           const data = snapshot.val();
           if (data) {
@@ -173,9 +174,6 @@
             roomRef.set(initialPlans);
             setPlans(initialPlans);
           }
-          setIsLoading(false);
-        }, (error) => {
-          console.error("Error sincronizando:", error);
           setIsLoading(false);
         });
 
@@ -196,8 +194,8 @@
             <div className={`w-16 h-16 rounded-2xl ${theme.accentBg} flex items-center justify-center text-slate-900 font-black text-3xl animate-bounce shadow-xl`}>
               $
             </div>
-            <h2 className="text-xl font-black">Conectando con tu Sala...</h2>
-            <p className="text-xs opacity-75">Sincronizando datos en la nube ☁️</p>
+            <h2 className="text-xl font-black">Conectando a tu Sala de AhorroPro...</h2>
+            <p className="text-xs opacity-75">Sincronizando datos en tiempo real ☁️</p>
           </div>
         );
       }
@@ -237,7 +235,6 @@
         }
       };
 
-      // Cambiar estado de pago y guardar en la nube
       const togglePaid = (periodNum, isPaidStatus, paidByPayer, receiptData = null) => {
         const currentDate = new Date().toLocaleDateString();
         const updatedSteps = plan.steps.map(s => {
@@ -256,18 +253,16 @@
         syncPlans(updatedPlans);
       };
 
-      // Confirmar quién paga en el modal y CERRAR AUTOMÁTICAMENTE
       const confirmPayerForStep = (payer) => {
         if (!selectedStepToPay) return;
         togglePaid(selectedStepToPay.period, true, payer, null);
-        setSelectedStepToPay(null); // <- Cierra el modal de inmediato
+        setSelectedStepToPay(null); // Cierra modal automáticamente
       };
 
-      // Confirmar quién paga en la ruleta y CERRAR AUTOMÁTICAMENTE
       const markRoulettePaid = (payer) => {
         if (!rouletteResult) return;
         togglePaid(rouletteResult.period, true, payer, null);
-        setShowRoulette(false); // <- Cierra el modal de ruleta de inmediato
+        setShowRoulette(false); // Cierra ruleta automáticamente
         setRouletteResult(null);
       };
 
