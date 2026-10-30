@@ -21,10 +21,11 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
+    // Configuración exacta con la URL de tu Realtime Database
     const firebaseConfig = {
       apiKey: "AIzaSyCOvzp1DFR6XGzrmdgS3-c2htcwKuBgIk",
       authDomain: "ahorropro-bcc1c.firebaseapp.com",
-      databaseURL: "https://ahorropro-bcc1c-default-rtdb.firebaseio.com/",
+      databaseURL: "https://ahorropro-bcc1c-default-rtdb.firebaseio.com",
       projectId: "ahorropro-bcc1c",
       storageBucket: "ahorropro-bcc1c.appspot.com",
       messagingSenderId: "1086972967689",
@@ -92,7 +93,7 @@
 
     function App() {
       const [plans, setPlans] = useState([]);
-      const [isLoading, setIsLoading] = useState(true); // Pantalla de carga inicial
+      const [isLoading, setIsLoading] = useState(true);
       const [selectedPlanId, setSelectedPlanId] = useState(null);
       const [currentThemeKey, setCurrentThemeKey] = useState(() => localStorage.getItem('ahorro_theme') || 'dark');
       const theme = themes[currentThemeKey] || themes.dark;
@@ -103,8 +104,6 @@
       const [isSpinning, setIsSpinning] = useState(false);
       const [showNewPlanModal, setShowNewPlanModal] = useState(false);
       const [showEditPlanModal, setShowEditPlanModal] = useState(false);
-      const [showShareModal, setShowShareModal] = useState(false);
-      const [copied, setCopied] = useState(false);
       const [isCloudConnected, setIsCloudConnected] = useState(false);
       const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
@@ -146,26 +145,26 @@
           setNotificationsEnabled(true);
         }
 
-        // Monitorear conexión y datos de Firebase en tiempo real
+        // 1. Estado de la conexión
         const connectedRef = db.ref('.info/connected');
         connectedRef.on('value', (snap) => {
-          if (snap.val() === true) {
-            setIsCloudConnected(true);
-          } else {
-            setIsCloudConnected(false);
-          }
+          setIsCloudConnected(snap.val() === true);
         });
 
+        // 2. Escuchar cambios de la nube en tiempo real
         const plansRef = db.ref('ahorro_plans');
         plansRef.on('value', (snapshot) => {
           const data = snapshot.val();
-          if (data) {
+          if (data && Array.isArray(data)) {
             setPlans(data);
+          } else if (data && typeof data === 'object') {
+            setPlans(Object.values(data));
           } else {
+            // Si la base de datos está totalmente vacía, creamos el plan inicial por única vez
             plansRef.set(initialPlans);
             setPlans(initialPlans);
           }
-          setIsLoading(false); // Apaga la pantalla de carga al recibir datos
+          setIsLoading(false);
         }, (error) => {
           console.error("Error sincronizando:", error);
           setIsLoading(false);
@@ -195,11 +194,10 @@
       const syncPlans = (newPlans) => {
         setPlans(newPlans);
         db.ref('ahorro_plans').set(newPlans).catch(err => {
-          alert('Error al guardar en la nube. Revisa tu conexión.');
+          console.error('Error al guardar en Firebase:', err);
         });
       };
 
-      // Pantalla de Carga Inicial para asegurar que esté conectado a la nube
       if (isLoading) {
         return (
           <div className="min-h-screen flex flex-col items-center justify-center space-y-4 p-4 text-center">
@@ -207,7 +205,7 @@
               $
             </div>
             <h2 className="text-xl font-black">Conectando con AhorroPro Nube...</h2>
-            <p className="text-xs opacity-75">Sincronizando tus metas en tiempo real ☁️</p>
+            <p className="text-xs opacity-75">Cargando tus metas guardadas ☁️</p>
           </div>
         );
       }
@@ -468,9 +466,7 @@
             </div>
           </header>
 
-          {/* ==================================================== */}
-          {/* PANTALLA DE INICIO (DASHBOARD) */}
-          {/* ==================================================== */}
+          {/* DASHBOARD */}
           {!selectedPlanId && (
             <div className="space-y-6">
               <div className="flex justify-between items-center flex-wrap gap-3">
@@ -516,7 +512,7 @@
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {plans.map(p => {
-                  const pPaidSteps = p.steps.filter(s => s.isPaid);
+                  const pPaidSteps = p.steps ? p.steps.filter(s => s.isPaid) : [];
                   const pSaved = pPaidSteps.reduce((acc, s) => acc + s.amount, 0);
                   const pProgress = ((pSaved / p.targetAmount) * 100).toFixed(1);
                   const pCompleted = pSaved >= p.targetAmount;
@@ -563,9 +559,7 @@
             </div>
           )}
 
-          {/* ==================================================== */}
-          {/* VISTA DEL CONTADOR (DETALLE DE LA META) */}
-          {/* ==================================================== */}
+          {/* DETALLE DE LA META */}
           {selectedPlanId && plan && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
@@ -596,7 +590,7 @@
                         onClick={() => deletePlan(plan.id)}
                         className="px-5 py-2.5 rounded-xl bg-red-500 text-white font-black text-xs hover:bg-red-600 shadow-lg transition flex items-center gap-2"
                       >
-                        🗑️ Eliminar Meta Completada (Cerrar Reto)
+                        🗑️ Eliminar Meta Completada
                       </button>
                     </div>
                   </div>
@@ -712,7 +706,7 @@
               {activeTab === 'grid' && (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {plan.steps.map(step => (
+                    {plan.steps && plan.steps.map(step => (
                       <div 
                         key={step.period}
                         onClick={() => handleStepClick(step)}
@@ -785,9 +779,7 @@
             </div>
           )}
 
-          {/* ==================================================== */}
           {/* MODALES */}
-          {/* ==================================================== */}
           {activeReceiptStep && (
             <div className={`fixed inset-0 z-50 ${theme.modalBg} flex items-center justify-center p-4`}>
               <div className={`${theme.card} border rounded-3xl p-6 max-w-sm w-full text-center relative shadow-2xl space-y-4`}>
@@ -844,7 +836,6 @@
             </div>
           )}
 
-          {/* Modal Crear Nueva Meta */}
           {showNewPlanModal && (
             <div className={`fixed inset-0 z-50 ${theme.modalBg} flex items-center justify-center p-4`}>
               <div className={`${theme.card} border rounded-3xl p-6 max-w-md w-full relative shadow-2xl max-h-[90vh] overflow-y-auto`}>
@@ -942,7 +933,6 @@
             </div>
           )}
 
-          {/* Modal Editar Meta */}
           {showEditPlanModal && plan && (
             <div className={`fixed inset-0 z-50 ${theme.modalBg} flex items-center justify-center p-4`}>
               <div className={`${theme.card} border rounded-3xl p-6 max-w-md w-full relative shadow-2xl max-h-[90vh] overflow-y-auto`}>
