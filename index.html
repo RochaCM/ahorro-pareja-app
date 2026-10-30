@@ -21,10 +21,10 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    // Configuración de tu Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyCOvzp1DFR6XGzrmdgS3-c2htcwKuBgIk",
       authDomain: "ahorropro-bcc1c.firebaseapp.com",
+      databaseURL: "https://ahorropro-bcc1c-default-rtdb.firebaseio.com/",
       projectId: "ahorropro-bcc1c",
       storageBucket: "ahorropro-bcc1c.appspot.com",
       messagingSenderId: "1086972967689",
@@ -91,7 +91,8 @@
     const daysOfWeek = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
     function App() {
-      const [plans, setPlans] = useState(initialPlans);
+      const [plans, setPlans] = useState([]);
+      const [isLoading, setIsLoading] = useState(true); // Pantalla de carga inicial
       const [selectedPlanId, setSelectedPlanId] = useState(null);
       const [currentThemeKey, setCurrentThemeKey] = useState(() => localStorage.getItem('ahorro_theme') || 'dark');
       const theme = themes[currentThemeKey] || themes.dark;
@@ -145,24 +146,35 @@
           setNotificationsEnabled(true);
         }
 
-        // Sincronización en tiempo real con Firebase Cloud
+        // Monitorear conexión y datos de Firebase en tiempo real
+        const connectedRef = db.ref('.info/connected');
+        connectedRef.on('value', (snap) => {
+          if (snap.val() === true) {
+            setIsCloudConnected(true);
+          } else {
+            setIsCloudConnected(false);
+          }
+        });
+
         const plansRef = db.ref('ahorro_plans');
         plansRef.on('value', (snapshot) => {
           const data = snapshot.val();
           if (data) {
             setPlans(data);
-            setIsCloudConnected(true);
           } else {
-            // Si está vacío en la nube, subimos los iniciales
             plansRef.set(initialPlans);
             setPlans(initialPlans);
-            setIsCloudConnected(true);
           }
+          setIsLoading(false); // Apaga la pantalla de carga al recibir datos
         }, (error) => {
-          setIsCloudConnected(false);
+          console.error("Error sincronizando:", error);
+          setIsLoading(false);
         });
 
-        return () => plansRef.off();
+        return () => {
+          connectedRef.off();
+          plansRef.off();
+        };
       }, []);
 
       const requestNotificationPermission = () => {
@@ -182,8 +194,23 @@
 
       const syncPlans = (newPlans) => {
         setPlans(newPlans);
-        db.ref('ahorro_plans').set(newPlans);
+        db.ref('ahorro_plans').set(newPlans).catch(err => {
+          alert('Error al guardar en la nube. Revisa tu conexión.');
+        });
       };
+
+      // Pantalla de Carga Inicial para asegurar que esté conectado a la nube
+      if (isLoading) {
+        return (
+          <div className="min-h-screen flex flex-col items-center justify-center space-y-4 p-4 text-center">
+            <div className={`w-16 h-16 rounded-2xl ${theme.accentBg} flex items-center justify-center text-slate-900 font-black text-3xl animate-bounce shadow-xl`}>
+              $
+            </div>
+            <h2 className="text-xl font-black">Conectando con AhorroPro Nube...</h2>
+            <p className="text-xs opacity-75">Sincronizando tus metas en tiempo real ☁️</p>
+          </div>
+        );
+      }
 
       const plan = plans.find(p => p.id === selectedPlanId) || null;
       const paidSteps = plan ? plan.steps.filter(s => s.isPaid) : [];
@@ -434,9 +461,9 @@
               <span className={`px-3 py-1.5 rounded-full text-xs font-bold border ${
                 isCloudConnected 
                   ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/40' 
-                  : 'bg-amber-500/20 text-amber-500 border-amber-500/40'
+                  : 'bg-red-500/20 text-red-500 border-red-500/40'
               }`}>
-                {isCloudConnected ? '☁️ En Línea (Nube)' : '⏳ Conectando...'}
+                {isCloudConnected ? '🟢 En Línea' : '🔴 Desconectado'}
               </span>
             </div>
           </header>
