@@ -40,7 +40,7 @@
       const params = new URLSearchParams(window.location.search);
       let room = params.get('sala');
       if (!room) {
-        room = 'sala-' + Math.random().toString(36).substring(2, 8);
+        room = 'sala-principal';
         window.history.replaceState({}, '', `?sala=${room}`);
       }
       return room;
@@ -118,7 +118,6 @@
       const [showShareModal, setShowShareModal] = useState(false);
       const [copied, setCopied] = useState(false);
       const [isCloudConnected, setIsCloudConnected] = useState(false);
-      const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
       const [selectedStepToPay, setSelectedStepToPay] = useState(null);
       const [activeReceiptStep, setActiveReceiptStep] = useState(null);
@@ -153,9 +152,6 @@
 
       useEffect(() => {
         document.body.className = `${theme.body} font-sans pb-12 transition-colors duration-300`;
-        if (window.Notification && Notification.permission === 'granted') {
-          setNotificationsEnabled(true);
-        }
 
         const connectedRef = db.ref('.info/connected');
         connectedRef.on('value', (snap) => {
@@ -164,8 +160,8 @@
 
         const roomRef = db.ref(`salas/${ROOM_ID}/plans`);
         
-        // Sincronización en tiempo real sin bloquear bucles
-        roomRef.on('value', (snapshot) => {
+        // Usamos once para la carga inicial para evitar que sobrescriba con initialPlans si ya hay datos
+        roomRef.once('value').then((snapshot) => {
           const data = snapshot.val();
           if (data) {
             const plansArray = Array.isArray(data) ? data : Object.values(data);
@@ -175,6 +171,19 @@
             setPlans(initialPlans);
           }
           setIsLoading(false);
+        }).catch((error) => {
+          console.error("Error al cargar:", error);
+          setPlans(initialPlans);
+          setIsLoading(false);
+        });
+
+        // Escuchador en tiempo real para cambios futuros de Pau o tuyos
+        roomRef.on('value', (snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            const plansArray = Array.isArray(data) ? data : Object.values(data);
+            setPlans(plansArray);
+          }
         });
 
         return () => {
@@ -183,11 +192,10 @@
         };
       }, []);
 
-      // Función de guardado atómico directo en la ruta de Firebase
       const saveToFirebase = (updatedPlans) => {
         setPlans(updatedPlans);
         db.ref(`salas/${ROOM_ID}/plans`).set(updatedPlans).catch(err => {
-          console.error("Error al sincronizar con Firebase:", err);
+          console.error("Error al guardar en Firebase:", err);
         });
       };
 
@@ -259,13 +267,13 @@
       const confirmPayerForStep = (payer) => {
         if (!selectedStepToPay) return;
         togglePaid(selectedStepToPay.period, true, payer, null);
-        setSelectedStepToPay(null); // Cierra modal automáticamente
+        setSelectedStepToPay(null);
       };
 
       const markRoulettePaid = (payer) => {
         if (!rouletteResult) return;
         togglePaid(rouletteResult.period, true, payer, null);
-        setShowRoulette(false); // Cierra ruleta automáticamente
+        setShowRoulette(false);
         setRouletteResult(null);
       };
 
@@ -414,7 +422,6 @@
 
       return (
         <div className="max-w-4xl mx-auto px-4 pt-6 space-y-6">
-          {/* Header Global */}
           <header className={`flex justify-between items-center ${theme.card} p-5 rounded-2xl border shadow-xl flex-wrap gap-3`}>
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-xl ${theme.accentBg} flex items-center justify-center text-slate-900 font-black text-xl`}>
@@ -455,7 +462,6 @@
             </div>
           </header>
 
-          {/* DASHBOARD */}
           {!selectedPlanId && (
             <div className="space-y-6">
               <div className="flex justify-between items-center flex-wrap gap-3">
@@ -545,7 +551,6 @@
             </div>
           )}
 
-          {/* DETALLE DE LA META */}
           {selectedPlanId && plan && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
@@ -559,7 +564,6 @@
               </div>
 
               <div className={`${theme.card} p-6 rounded-3xl border shadow-2xl space-y-4 transition-all duration-500`}>
-                
                 {isCompleted && (
                   <div className="bg-emerald-500/20 border border-emerald-500/50 p-5 rounded-2xl text-center space-y-3 animate-pulse">
                     <div>
@@ -765,7 +769,6 @@
             </div>
           )}
 
-          {/* MODAL COMPARTIR LINK */}
           {showShareModal && (
             <div className={`fixed inset-0 z-50 ${theme.modalBg} flex items-center justify-center p-4`}>
               <div className={`${theme.card} border rounded-3xl p-6 max-w-sm w-full text-center relative shadow-2xl space-y-4`}>
@@ -793,7 +796,6 @@
             </div>
           )}
 
-          {/* MODAL SELECCIONAR QUIÉN PAGA (Cierre automático) */}
           {selectedStepToPay && plan && (
             <div className={`fixed inset-0 z-50 ${theme.modalBg} flex items-center justify-center p-4`}>
               <div className={`${theme.card} border rounded-3xl p-6 max-w-xs w-full text-center relative shadow-2xl space-y-4`}>
@@ -817,7 +819,6 @@
             </div>
           )}
 
-          {/* MODAL RULETA (Cierre automático) */}
           {showRoulette && plan && (
             <div className={`fixed inset-0 z-50 ${theme.modalBg} flex items-center justify-center p-4`}>
               <div className={`${theme.card} border rounded-3xl p-6 max-w-sm w-full text-center relative shadow-2xl`}>
@@ -859,7 +860,6 @@
             </div>
           )}
 
-          {/* OTROS MODALES */}
           {activeReceiptStep && (
             <div className={`fixed inset-0 z-50 ${theme.modalBg} flex items-center justify-center p-4`}>
               <div className={`${theme.card} border rounded-3xl p-6 max-w-sm w-full text-center relative shadow-2xl space-y-4`}>
@@ -1070,7 +1070,7 @@
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block mb-1 font-bold">Monto Meta ($)</label>
-                      <input type="number" value={editTarget} onChange={e => setNewTarget(e.target.value)} required className={`w-full ${theme.inputBg} border rounded-xl p-3`} />
+                      <input type="number" value={editTarget} onChange={e => setEditTarget(e.target.value)} required className={`w-full ${theme.inputBg} border rounded-xl p-3`} />
                     </div>
                     <div>
                       <label className="block mb-1 font-bold">Total de Pasos / Semanas</label>
